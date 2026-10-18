@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StudyBuddy</title>
+<meta name="description" content="Turn your notes, or a photo of them, into a summary, quiz or flashcards using the open-weight Gemma 4 model running locally with Ollama.">
+<style>
+:root{
+  --bg:#f5f6fb; --card:#ffffff; --ink:#1b2130; --muted:#5b647a; --line:#e0e4ee;
+  --accent:#4f46e5; --accent-ink:#ffffff; --accent-soft:#eceafd;
+  --good:#15803d; --good-bg:#e6f6ec; --bad:#b91c1c; --bad-bg:#fdeaea; --warn:#92400e; --warn-bg:#fef3c7;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#11131b; --card:#1a1e2a; --ink:#ebeef6; --muted:#9aa3b8; --line:#2a3040;
+    --accent:#8b93ff; --accent-ink:#10121a; --accent-soft:#252a4a;
+    --good:#4ade80; --good-bg:#12301f; --bad:#f87171; --bad-bg:#371818; --warn:#fcd34d; --warn-bg:#3a2e0e;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Nastaliq Urdu","Noto Sans Arabic",sans-serif}
+.wrap{max-width:820px;margin:0 auto;padding:28px 16px 56px}
+header h1{margin:0 0 4px;font-size:2rem;letter-spacing:-.02em}
+header h1 span{color:var(--accent)}
+header p{margin:0;color:var(--muted)}
+.status{display:inline-flex;align-items:center;gap:8px;margin:16px 0 0;padding:6px 12px;border-radius:999px;font-size:.88rem;background:var(--card);border:1px solid var(--line);color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:#9ca3af}
+.status.ok .dot{background:var(--good)} .status.bad .dot{background:var(--bad)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:18px}
+label{display:block;font-weight:600;margin:0 0 6px;font-size:.92rem}
+textarea,input[type=text],select{width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea{min-height:150px;resize:vertical}
+textarea:focus,input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-top:14px}
+.photo{margin-top:14px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.photo input[type=file]{display:none}
+.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 14px;border-radius:10px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);padding:11px 20px;font-size:1rem}
+.btn.primary:disabled{opacity:.6;cursor:progress}
+.btn.link{border:none;background:none;color:var(--accent);padding:4px 2px;text-decoration:underline}
+#preview{max-height:90px;border-radius:8px;border:1px solid var(--line);display:none}
+.actions{margin-top:18px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.msg{margin-top:14px;padding:10px 14px;border-radius:10px;font-size:.93rem;white-space:pre-wrap}
+.msg.err{background:var(--bad-bg);color:var(--bad)} .msg.info{background:var(--warn-bg);color:var(--warn)}
+.hidden{display:none!important}
+#out h2{margin:0 0 10px;font-size:1.15rem}
+#out ul{padding-left:1.2rem;margin:.3rem 0 .8rem} #out li{margin:.3rem 0}
+#out .takeaway{background:var(--accent-soft);border-radius:10px;padding:10px 14px;font-weight:600}
+#out[dir=rtl]{font-size:1.12rem;line-height:2}
+.score{font-weight:700;margin-bottom:12px;color:var(--accent)}
+.q{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.q h3{margin:0 0 10px;font-size:1.02rem}
+.opts{display:grid;gap:8px}
+.opt{font:inherit;text-align:start;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:9px 12px;cursor:pointer}
+.opt:hover{border-color:var(--accent)}
+.q.done .opt{pointer-events:none}
+.opt.right{background:var(--good-bg);border-color:var(--good);color:var(--good);font-weight:600}
+.opt.wrong{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+.exp{margin:10px 0 0;color:var(--muted);font-size:.93rem}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.fc{font:inherit;color:var(--ink);text-align:center;min-height:130px;padding:14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);cursor:pointer;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.fc small{color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:.7rem}
+.fc.flipped{background:var(--accent-soft);border-color:var(--accent)}
+.hint{color:var(--muted);font-size:.85rem;margin-top:8px}
+footer{margin-top:28px;color:var(--muted);font-size:.85rem;text-align:center}
+details{margin-top:14px;color:var(--muted);font-size:.9rem} summary{cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Study<span>Buddy</span></h1>
+    <p>Turn your notes, or a photo of them, into a summary, quiz or flashcards. Runs on your own computer with the open-weight <strong>Gemma 4</strong> model through Ollama.</p>
+    <div id="status" class="status" role="status"><span class="dot"></span><span id="statusText">Checking Ollama...</span></div>
+  </header>
+
+  <main>
+    <section class="card" aria-label="Your notes">
+      <label for="notes">Your notes</label>
+      <textarea id="notes" placeholder="Paste or type what you are studying... or add a photo of your notes below."></textarea>
+      <div class="photo">
+        <label class="btn" for="photo" style="margin:0">Add a photo of notes</label>
+        <input id="photo" type="file" accept="image/*">
+        <img id="preview" alt="Preview of your notes photo">
+        <button id="clearPhoto" class="btn link hidden" type="button">Remove photo</button>
+        <button id="example" class="btn link" type="button">Try an example</button>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="mode">Make me a...</label>
+          <select id="mode">
+            <option value="quiz">Quiz (multiple choice)</option>
+            <option value="flashcards">Flashcards</option>
+            <option value="summary">Summary</option>
+          </select>
+        </div>
+        <div>
+          <label for="lang">Language</label>
+          <select id="lang">
+            <option value="en">English</option>
+            <option value="ur">Urdu (اردو)</option>
+          </select>
+        </div>
+        <div id="countWrap">
+          <label for="count">How many?</label>
+          <select id="count">
+            <option>3</option><option selected>5</option><option>8</option><option>10</option>
+          </select>
+        </div>
+      </div>
+
+      <details>
+        <summary>Model settings</summary>
+        <label for="model" style="margin-top:10px">Ollama model</label>
+        <input id="model" type="text" list="models" value="gemma4:e2b" autocomplete="off" spellcheck="false">
+        <datalist id="models"></datalist>
+        <p class="hint">Default is the small Gemma 4 model. Install it once with <code>ollama pull gemma4:e2b</code>.</p>
+      </details>
+
+      <div class="actions">
+        <button id="go" class="btn primary" type="button">Generate</button>
+        <span id="timer" class="hint"></span>
+      </div>
+      <div id="error" class="msg err hidden" role="alert"></div>
+    </section>
+
+    <section id="outCard" class="card hidden" aria-live="polite">
+      <div id="out"></div>
+    </section>
+  </main>
+
+  <footer>Open source (MIT) · Built with Gemma 4 + Ollama · Your notes never leave your computer</footer>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+const OLLAMA_URL = "http://localhost:11434";
+const state = { image: null, busy: false };
+const $ = (id) => document.getElementById(id);
+
+/* ---------- small helpers ---------- */
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined && text !== null) n.textContent = text;
+  return n;
+}
+
+/* ---------- prompts ---------- */
+function langName(lang) {
+  return lang === "ur" ? "Urdu (write in Urdu script)" : "English";
+}
+
+function buildPrompt({ mode, lang, count, hasImage, notes }) {
+  const L = langName(lang);
+  const source = hasImage
+    ? "The study notes are in the attached image. Read the text in the image carefully first." +
+      (notes ? "\n\nExtra text from the student:\n" + notes : "")
+    : 'Study notes:\n"""\n' + notes + '\n"""';
+
+  if (mode === "summary") {
+    return "You are StudyBuddy, a friendly tutor. " + source +
+      "\n\nSummarize the notes into at most 8 short bullet points, each starting with '- '. " +
+      "Then add one last line that starts with 'Key takeaway:'. " +
+      "Write in " + L + ". Reply with only the summary.";
+  }
+  if (mode === "flashcards") {
+    return "You are StudyBuddy, a friendly tutor. " + source +
+      "\n\nCreate exactly " + count + " flashcards from the notes. Each card has a short 'front' (a term or question) and a clear 'back' (the answer). " +
+      "Write the cards in " + L + ". " +
+      'Return ONLY valid JSON in exactly this shape: {"cards":[{"front":"...","back":"..."}]}';
+  }
+  return "You are StudyBuddy, a friendly tutor. " + source +
+    "\n\nCreate exactly " + count + " multiple-choice questions based on the notes. Each question has exactly 4 options and one correct answer. " +
+    "Write the questions, options and explanations in " + L + ". " +
+    'Return ONLY valid JSON in exactly this shape: {"questions":[{"question":"...","options":["...","...","...","..."],"answer":0,"explanation":"..."}]} ' +
+    'where "answer" is the index (0 to 3) of the correct option.';
+}
+
+/* ---------- reading the model's answer ---------- */
+function parseLooseJSON(text) {
+  if (typeof text !== "string") return null;
+  const t = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  try { return JSON.parse(t); } catch (_) { /* try to cut out the object */ }
+  const a = t.indexOf("{"), b = t.lastIndexOf("}");
+  if (a >= 0 && b > a) {
+    try { return JSON.parse(t.slice(a, b + 1)); } catch (_) { /* give up */ }
+  }
+  return null;
+}
+
+function normalizeQuiz(obj) {
+  const arr = obj && (Array.isArray(obj) ? obj : (obj.questions || obj.quiz));
+  if (!Array.isArray(arr)) return [];
+  const out = [];
+  for (const q of arr) {
+    if (!q) continue;
+    const question = String(q.question || q.q || "").trim();
+    const options = Array.isArray(q.options) ? q.options.map((o) => String(o).trim()).filter(Boolean) : [];
+    let answer = q.answer;
+    if (typeof answer === "string") {
+      const s = answer.trim();
+      if (/^[A-Da-d]$/.test(s)) answer = s.toUpperCase().charCodeAt(0) - 65;
+      else if (/^\d+$/.test(s)) answer = parseInt(s, 10);
+      else answer = options.findIndex((o) => o.toLowerCase() === s.toLowerCase());
+    }
+    if (Number.isInteger(answer) && answer === options.length) answer -= 1; // model counted from 1
+    if (!question || options.length < 2 || !Number.isInteger(answer) || answer < 0 || answer >= options.length) continue;
+    out.push({ question, options, answer, explanation: String(q.explanation || "").trim() });
+  }
+  return out;
+}
+
+function normalizeCards(obj) {
+  const arr = obj && (Array.isArray(obj) ? obj : (obj.cards || obj.flashcards));
+  if (!Array.isArray(arr)) return [];
+  const out = [];
+  for (const c of arr) {
+    if (!c) continue;
+    const front = String(c.front || c.question || c.term || "").trim();
+    const back = String(c.back || c.answer || c.definition || "").trim();
+    if (front && back) out.push({ front, back });
+  }
+  return out;
+}
+
+/* ---------- rendering (textContent only, so model output can never inject HTML) ---------- */
+function renderSummary(root, text) {
+  root.replaceChildren();
+  root.appendChild(el("h2", null, "Summary"));
+  const lines = String(text).replace(/\r/g, "").split("\n").map((l) => l.trim()).filter(Boolean);
+  let ul = null;
+  lines.forEach((raw, i) => {
+    const line = raw.replace(/\*\*|__/g, "").replace(/^#+\s*/, "");
+    const m = line.match(/^(?:[-*•]|\d+[.)])\s+(.*)$/);
+    if (m) {
+      if (!ul) { ul = el("ul"); root.appendChild(ul); }
+      ul.appendChild(el("li", null, m[1]));
+    } else {
+      ul = null;
+      const p = el("p", null, line);
+      if (/^key takeaway/i.test(line) || (i === lines.length - 1 && root.querySelector("ul"))) p.className = "takeaway";
+      root.appendChild(p);
+    }
+  });
+}
+
+function renderQuiz(root, qs) {
+  root.replaceChildren();
+  root.appendChild(el("h2", null, "Quiz"));
+  let answered = 0, correct = 0;
+  const score = el("div", "score");
+  const update = () => {
+    score.textContent = "Score: " + correct + " / " + qs.length + (answered === qs.length ? " — all done!" : "");
+  };
+  update();
+  root.appendChild(score);
+  qs.forEach((q, qi) => {
+    const card = el("div", "q");
+    card.appendChild(el("h3", null, (qi + 1) + ". " + q.question));
+    const list = el("div", "opts");
+    const exp = el("p", "exp hidden", q.explanation);
+    q.options.forEach((opt, oi) => {
+      const b = el("button", "opt", opt);
+      b.type = "button";
+      b.addEventListener("click", () => {
+        if (card.classList.contains("done")) return;
+        card.classList.add("done");
+        answered++;
+        if (oi === q.answer) { correct++; b.classList.add("right"); }
+        else { b.classList.add("wrong"); list.children[q.answer].classList.add("right"); }
+        if (q.explanation) exp.classList.remove("hidden");
+        update();
+      });
+      list.appendChild(b);
+    });
+    card.appendChild(list);
+    card.appendChild(exp);
+    root.appendChild(card);
+  });
+}
+
+function renderCards(root, cards) {
+  root.replaceChildren();
+  root.appendChild(el("h2", null, "Flashcards"));
+  root.appendChild(el("p", "hint", "Tap a card to flip it."));
+  const grid = el("div", "cards");
+  cards.forEach((c) => {
+    const b = el("button", "fc");
+    b.type = "button";
+    const tag = el("small", null, "Question");
+    const txt = el("span", null, c.front);
+    b.append(tag, txt);
+    let flipped = false;
+    b.addEventListener("click", () => {
+      flipped = !flipped;
+      b.classList.toggle("flipped", flipped);
+      tag.textContent = flipped ? "Answer" : "Question";
+      txt.textContent = flipped ? c.back : c.front;
+    });
+    grid.appendChild(b);
+  });
+  root.appendChild(grid);
+}
+
+/* ---------- talking to Ollama ---------- */
+async function callOllama({ model, prompt, image, json }) {
+  const body = { model, prompt, stream: false, think: false, options: { temperature: 0.4 } };
+  if (image) body.images = [image];
+  if (json) body.format = "json";
+  let r;
+  try {
+    r = await fetch(OLLAMA_URL + "/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    throw new Error("Can't reach Ollama at " + OLLAMA_URL + ".\nMake sure Ollama is running, and open this page from http://localhost (for example with VS Code Live Server) instead of double-clicking the file.");
+  }
+  if (!r.ok) {
+    let msg = "";
+    try { msg = (await r.json()).error || ""; } catch (_) { /* no body */ }
+    if (r.status === 404) throw new Error('Model "' + model + '" is not installed. Run this in a terminal:\nollama pull ' + model);
+    if (r.status === 403) throw new Error("Ollama refused this page's address (403). Set the OLLAMA_ORIGINS environment variable to * and restart Ollama.");
+    throw new Error(msg || "Ollama returned an error (" + r.status + ").");
+  }
+  const d = await r.json();
+  return d.response || "";
+}
+
+async function checkOllama() {
+  const box = $("status"), txt = $("statusText");
+  try {
+    const r = await fetch(OLLAMA_URL + "/api/tags");
+    const d = await r.json();
+    const names = (d.models || []).map((m) => m.name);
+    const dl = $("models");
+    names.forEach((n) => { const o = document.createElement("option"); o.value = n; dl.appendChild(o); });
+    const g = names.find((n) => /^gemma4/i.test(n));
+    if (g) $("model").value = g;
+    box.className = "status ok";
+    txt.textContent = g ? "Ollama is running · using " + g : "Ollama is running, but Gemma 4 is not installed yet (ollama pull gemma4:e2b)";
+    if (!g) box.className = "status bad";
+  } catch (_) {
+    box.className = "status bad";
+    txt.textContent = "Ollama not reachable. Start Ollama and open this page from http://localhost";
+  }
+}
+
+/* ---------- photo ---------- */
+async function loadPhoto(file) {
+  const dataUrl = await new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.onerror = () => rej(new Error("Could not read that image."));
+    fr.readAsDataURL(file);
+  });
+  const img = await new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error("That file is not a readable image."));
+    i.src = dataUrl;
+  });
+  const scale = Math.min(1, 1280 / Math.max(img.width, img.height)); // smaller photos = faster answers
+  const c = document.createElement("canvas");
+  c.width = Math.round(img.width * scale);
+  c.height = Math.round(img.height * scale);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  const out = c.toDataURL("image/jpeg", 0.85);
+  state.image = out.split(",")[1];
+  $("preview").src = out;
+  $("preview").style.display = "block";
+  $("clearPhoto").classList.remove("hidden");
+}
+
+function clearPhoto() {
+  state.image = null;
+  $("photo").value = "";
+  $("preview").style.display = "none";
+  $("preview").removeAttribute("src");
+  $("clearPhoto").classList.add("hidden");
+}
+
+/* ---------- main action ---------- */
+function showError(msg) {
+  const e = $("error");
+  e.textContent = msg;
+  e.classList.toggle("hidden", !msg);
+}
+
+function setBusy(on) {
+  state.busy = on;
+  const b = $("go");
+  b.disabled = on;
+  b.textContent = on ? "Generating..." : "Generate";
+  if (state.timerId) { clearInterval(state.timerId); state.timerId = null; }
+  $("timer").textContent = "";
+  if (on) {
+    const t0 = Date.now();
+    $("timer").textContent = "Gemma is thinking... 0s (the first answer can take up to a minute)";
+    state.timerId = setInterval(() => {
+      $("timer").textContent = "Gemma is thinking... " + Math.round((Date.now() - t0) / 1000) + "s (the first answer can take up to a minute)";
+    }, 1000);
+  }
+}
+
+async function generate() {
+  if (state.busy) return;
+  showError("");
+  const mode = $("mode").value, lang = $("lang").value, count = parseInt($("count").value, 10);
+  const notes = $("notes").value.trim();
+  const model = $("model").value.trim() || "gemma4:e2b";
+  if (!notes && !state.image) { showError("Paste some notes or add a photo of them first."); return; }
+
+  setBusy(true);
+  try {
+    const prompt = buildPrompt({ mode, lang, count, hasImage: !!state.image, notes });
+    const wantJSON = mode !== "summary";
+    let items = null, text = "";
+    for (let attempt = 0; attempt < 2 && !items; attempt++) {
+      text = await callOllama({ model, prompt, image: state.image, json: wantJSON });
+      if (!wantJSON) { if (text.trim()) items = text; continue; }
+      const obj = parseLooseJSON(text);
+      const list = mode === "quiz" ? normalizeQuiz(obj) : normalizeCards(obj);
+      if (list.length) items = list;
+    }
+    if (!items) throw new Error("The AI's answer was empty or in a format I could not read. Please press Generate again.");
+
+    const out = $("out");
+    out.setAttribute("dir", lang === "ur" ? "rtl" : "ltr");
+    out.setAttribute("lang", lang);
+    if (mode === "summary") renderSummary(out, items);
+    else if (mode === "quiz") renderQuiz(out, items);
+    else renderCards(out, items);
+    $("outCard").classList.remove("hidden");
+    $("outCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (e) {
+    showError(e.message || String(e));
+  } finally {
+    setBusy(false);
+  }
+}
+
+const EXAMPLE = "Photosynthesis is the process plants use to make food. It happens in the chloroplasts, which contain chlorophyll, the green pigment that absorbs sunlight. Plants take in carbon dioxide from the air through tiny pores called stomata and water from the soil through their roots. Using light energy, they turn carbon dioxide and water into glucose (sugar) and release oxygen as a by-product. The overall equation is: 6CO2 + 6H2O + light -> C6H12O6 + 6O2. The glucose is used for energy and growth, and the oxygen is released into the air for living things to breathe.";
+
+/* ---------- wire up ---------- */
+function init() {
+  $("go").addEventListener("click", generate);
+  $("example").addEventListener("click", () => { $("notes").value = EXAMPLE; });
+  $("clearPhoto").addEventListener("click", clearPhoto);
+  $("photo").addEventListener("change", async (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    try { await loadPhoto(f); showError(""); } catch (e) { showError(e.message); clearPhoto(); }
+  });
+  $("mode").addEventListener("change", () => {
+    $("countWrap").classList.toggle("hidden", $("mode").value === "summary");
+  });
+  checkOllama();
+}
+
+// exposed for automated tests
+window.StudyBuddy = { buildPrompt, parseLooseJSON, normalizeQuiz, normalizeCards, renderSummary, renderQuiz, renderCards, callOllama, generate };
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+else init();
+})();
+</script>
+</body>
+</html>
